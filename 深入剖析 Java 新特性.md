@@ -173,3 +173,58 @@ String textBlock = """
 </html>
 ```
 
+### 03 | 档案类：怎么精简地表达不可变数据？
+
+Java 档案类是用来表示不可变数据的透明载体。
+
+天生的多线程安全 / 简化的代码
+
+```java
+public final class Circle implements Shape {
+    public final double radius;
+
+    public Circle(double radius) {
+        this.radius = radius;
+    }
+
+    @Override
+    public double area() {
+        return Math.PI * radius * radius;
+    }
+}
+```
+
+声明档案类
+
+```java
+public record Circle(double radius) implements Shape {
+    @Override
+    public double area() {
+        return Math.PI * radius * radius;
+    }
+}
+```
+
+```java
+Circle circle = new Circle(10.0);
+double radius = circle.radius();
+```
+
+档案类内置了这些方法的缺省实现：构造方法、equals 方法、hashCode 方法、toString 方法、不可变数据的读取方法。
+
+```java
+public record Circle(double radius) implements Shape {
+    public Circle {
+        if (radius < 0) {
+            throw new IllegalArgumentException(
+                "The radius of a circle cannot be negative [" + radius + "]");
+        }
+    }
+
+    @Override
+    public double area() {
+        return Math.PI * radius * radius;
+    }
+}
+```
+
