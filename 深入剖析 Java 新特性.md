@@ -272,3 +272,116 @@ public abstract sealed class Shape permits Circle, Rectangle, Square {
 
 在我们日常的接口设计和编码实践中，使用这四个限定方法的优先级应该是由高到低的。最优先使用私有类，尽量不要使用不受限制的扩展性。
 
+### 05 | 类型匹配：怎么切除臃肿的强制转换？
+
+通常，一个模式是匹配谓词和匹配变量的组合。其中，匹配谓词用来确定模式和目标是否匹配。在模式和目标匹配的情况下，匹配变量是从匹配目标里提取出来的一个或者多个变量。
+
+对于类型匹配来说，匹配谓词用来指定模式的数据类型，而匹配变量就是一个属于该类型的数据变量。需要注意的是，对于类型匹配来说，匹配变量只有一个。
+
+```java
+static boolean isSquare(Shape shape) {
+    // 匹配谓词
+    if (shape instanceof Rectangle) {
+        // 类型转换 & 匹配变量
+        Rectangle rect = (Rectangle) shape;
+        return (rect.length == rect.width);
+    }
+    return (shape instanceof Square);
+}
+```
+
+**类型匹配**
+
+```java
+// 匹配谓词 & 类型转换 & 匹配变量
+if (shape instanceof Rectangle rect) {
+    return (rect.length == rect.width);
+}
+```
+
+**匹配变量的作用域**
+
+```java
+// 匹配变量的作用域紧跟着类型匹配语句
+public static boolean isSquare(Shape shape) {
+    if (shape instanceof Rectangle rect) {
+        // rect is in scope
+        return rect.length() == rect.width();
+    }
+    // rect is not in scope here
+    return shape instanceof Square;
+}
+```
+
+```java
+// 匹配变量的作用域远离了类型匹配语句
+public static boolean isSquare(Shape shape) {
+    if (!(shape instanceof Rectangle rect)) {
+        // rect is not in scope here
+        return shape instanceof Square;
+    }
+    // rect is in scope
+    return rect.length() == rect.width();
+}
+```
+
+```java
+public static boolean isSquare(Shape shape) {
+    return shape instanceof Square ||  // rect is not in scope here
+          (shape instanceof Rectangle rect &&
+           rect.length() == rect.width());   // rect is in scope here
+}
+```
+
+```java
+// 不能通过编译器的审查
+public static boolean isSquare(Shape shape) {
+    return shape instanceof Square ||  // rect is not in scope here
+          (shape instanceof Rectangle rect ||
+           rect.length() == rect.width());   // rect is not in scope here
+}
+```
+
+```java
+// 不能通过编译器的审查
+public static boolean isSquare(Shape shape) {
+    return shape instanceof Square |  // rect is not in scope here
+          (shape instanceof Rectangle rect &
+           rect.length() == rect.width());   // rect is in scope here
+}
+```
+
+```java
+// 匹配变量的作用域紧跟着类型匹配语句
+public final class Shadow {
+    private static final Rectangle rect = null;
+    public static boolean isSquare(Shape shape) {
+        if (shape instanceof Rectangle rect) {
+            // Field rect is shadowed, local rect is in scope
+            System.out.println("This should be the local rect: " + rect);
+            return rect.length() == rect.width();
+        }
+        // Field rect is in scope, local rect is not in scope here
+        System.out.println("This should be the field rect: " + rect);
+        return shape instanceof Shape.Square;
+    }
+}
+```
+
+```java
+// 匹配变量的作用域远离了类型匹配语句
+public final class Shadow {
+    private static final Rectangle rect = null;
+    public static boolean isSquare(Shape shape) {
+        if (!(shape instanceof Rectangle rect)) {
+            // Field rect is in scope, local rect is not in scope here
+            System.out.println("This should be the field rect: " + rect);
+            return shape instanceof Shape.Square;
+        }
+        // Field rect is shadowed, local rect is in scope
+        System.out.println("This should be the local rect: " + rect);
+        return rect.length() == rect.width();
+    }
+}
+```
+
