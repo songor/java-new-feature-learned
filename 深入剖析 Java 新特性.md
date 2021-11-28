@@ -385,3 +385,147 @@ public final class Shadow {
 }
 ```
 
+### 06 | switch 表达式：怎么简化多情景操作？
+
+第一个容易犯错的地方，就是在 break 关键字的使用上。
+
+为什么 switch 语句里需要使用 break 呢？最主要的原因，就是希望能够在不同的情况下，共享部分或者全部的代码片段。
+
+第二个容易犯错的地方，是反复出现的赋值语句。
+
+```java
+import java.util.Calendar;
+
+class DaysInMonth {
+    public static void main(String[] args) {
+        Calendar today = Calendar.getInstance();
+        int month = today.get(Calendar.MONTH);
+        int year = today.get(Calendar.YEAR);
+
+        int daysInMonth;
+        switch (month) {
+            case Calendar.JANUARY:
+            case Calendar.MARCH:
+            case Calendar.MAY:
+            case Calendar.JULY:
+            case Calendar.AUGUST:
+            case Calendar.OCTOBER:
+            case Calendar.DECEMBER:
+                daysInMonth = 31;
+                break;
+            case Calendar.APRIL:
+            case Calendar.JUNE:
+            case Calendar.SEPTEMBER:
+            case Calendar.NOVEMBER:
+                daysInMonth = 30;
+                break;
+            case Calendar.FEBRUARY:
+                if (((year % 4 == 0) && !(year % 100 == 0))
+                        || (year % 400 == 0)) {
+                    daysInMonth = 29;
+                } else {
+                    daysInMonth = 28;
+                }
+                break;
+            default:
+                throw new RuntimeException(
+                    "Calendar in JDK does not work");
+        }
+
+        System.out.println(
+            "There are " + daysInMonth + " days in this month.");
+    }
+}
+```
+
+**switch 表达式**
+
+```java
+import java.util.Calendar;
+
+class DaysInMonth {
+    public static void main(String[] args) {
+        Calendar today = Calendar.getInstance();
+        int month = today.get(Calendar.MONTH);
+        int year = today.get(Calendar.YEAR);
+
+        int daysInMonth = switch (month) {
+            case Calendar.JANUARY,
+                 Calendar.MARCH,
+                 Calendar.MAY,
+                 Calendar.JULY,
+                 Calendar.AUGUST,
+                 Calendar.OCTOBER,
+                 Calendar.DECEMBER -> 31;
+            case Calendar.APRIL,
+                 Calendar.JUNE,
+                 Calendar.SEPTEMBER,
+                 Calendar.NOVEMBER -> 30;
+            case Calendar.FEBRUARY -> {
+                if (((year % 4 == 0) && !(year % 100 == 0))
+                        || (year % 400 == 0)) {
+                    yield 29;
+                } else {
+                    yield 28;
+                }
+            }
+            default -> throw new RuntimeException(
+                    "Calendar in JDK does not work");
+        };
+
+        System.out.println(
+                "There are " + daysInMonth + " days in this month.");
+    }
+}
+```
+
+switch 代码块出现在了赋值运算符的右侧。
+
+一个 case 语句，可以处理多个情景。
+
+新的情景操作符 “->”，它是一个箭头标识符。如果要匹配的情景有两个或者两个以上，就要使用逗号 “,” 分隔符把它们分割开来。
+
+箭头标识符右侧的数值，代表的就是该匹配情景下，switch 表达式的数值。箭头标识符右侧可以是表达式、代码块或者异常抛出语句，而不能是其他的形式。如果只需要一个语句，这个语句也要以代码块的形式呈现出来。
+
+新的关键字 “yield”。为了便于理解，我们可以把 yield 语句产生的值看成是 switch 表达式的返回值。
+
+在 switch 表达式里，所有的情景都要列举出来，不能多、也不能少（这也就是我们常说的穷举）。
+
+**改进的 switch 语句**
+
+```java
+private static int daysInMonth(int year, int month) {
+    int daysInMonth = 0;
+    switch (month) {
+        case Calendar.JANUARY,
+             Calendar.MARCH,
+             Calendar.MAY,
+             Calendar.JULY,
+             Calendar.AUGUST,
+             Calendar.OCTOBER,
+             Calendar.DECEMBER -> daysInMonth = 31;
+        case Calendar.APRIL,
+             Calendar.JUNE,
+             Calendar.SEPTEMBER,
+             Calendar.NOVEMBER -> daysInMonth = 30;
+        case Calendar.FEBRUARY -> {
+            if (((year % 4 == 0) && !(year % 100 == 0))
+                    || (year % 400 == 0)) {
+                daysInMonth = 29;
+                break;
+            }
+            daysInMonth = 28;
+        }
+        // default -> throw new RuntimeException(
+        //        "Calendar in JDK does not work");
+    }
+    return daysInMonth;
+}
+```
+
+switch 语句可以使用箭头标识符，也可以使用 break 语句，也不需要列出所有的情景。
+
+使用箭头标识符的 switch 语句不再需要 break 语句来实现情景间的代码共享了。
+
+不过，使用箭头标识符的 switch 语句并没有禁止 break 语句，而是恢复了它本来的意义：从代码片段里抽身，就像它在循环语句里扮演的角色一样。
+
