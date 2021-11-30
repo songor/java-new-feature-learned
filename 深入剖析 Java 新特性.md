@@ -529,3 +529,98 @@ switch 语句可以使用箭头标识符，也可以使用 break 语句，也不
 
 不过，使用箭头标识符的 switch 语句并没有禁止 break 语句，而是恢复了它本来的意义：从代码片段里抽身，就像它在循环语句里扮演的角色一样。
 
+### 07 | switch 匹配：能不能适配不同的类型？
+
+给定了一个形状的对象，我们该怎么判断这个对象是不是一个正方形呢？
+
+（子类扩充出现的兼容性问题）
+
+```java
+public sealed interface Shape
+        permits Shape.Circle, Shape.Rectangle, Shape.Square {
+    /**
+     * @since 1.0
+     */
+    record Circle(double radius) implements Shape {
+    }
+
+    /**
+     * @since 1.0
+     */
+    record Square(double side) implements Shape {
+    }
+
+    /**
+     * @since 2.0
+     */
+    record Rectangle(double length, double width) implements Shape {
+    }
+}
+```
+
+```java
+/**
+ * @since 1.0
+ */
+public static boolean isSquare(Shape shape) {
+    return (shape instanceof Shape.Square);
+}
+
+/**
+ * @since 2.0
+ */
+public static boolean isSquare(Shape shape) {
+    if (shape instanceof Shape.Rectangle rect) {
+        return (rect.length() == rect.width());
+    }
+    return (shape instanceof Shape.Square);
+}
+```
+
+意识到扩展类库需要更改，并不是一件容易的事情。
+
+```java
+/**
+ * @since 1.0
+ */
+public static boolean isSquare(Shape shape) {
+    return switch (shape) {
+        case null, Shape.Circle c -> false;
+        case Shape.Square s -> true;
+    };
+}
+
+/**
+ * @since 2.0
+ */
+public static boolean isSquare(Shape shape) {
+    return switch (shape) {
+        case null, Shape.Circle c -> false;
+        case Shape.Square s -> true;
+        case Shape.Rectangle r -> r.length() == r.width();
+    };
+}
+```
+
+具有模式匹配能力的 switch，提升了 switch 的数据类型匹配能力。switch 要匹配的数据，现在可以是整型的原始类型（数字、枚举、字符串），或者引用类型。
+
+具有模式匹配能力的 switch，支持空引用的匹配。
+
+类型匹配出现在了匹配情景中。也就是说，你既可以检查类型，还可以获得匹配变量。
+
+使用 switch 表达式，穷举出所有的情景。这种提前暴露问题的方式，大大地降低了代码维护的难度，让我们有更多的精力专注在更有价值的问题上。
+
+**什么时候使用 default？**
+
+```java
+public static boolean isSquare(Shape shape) {
+    return switch (shape) {
+        case Shape.Square s -> true;
+        case null, default -> false;
+    };
+}
+```
+
+使用了 default，也就意味着这样的 switch 表达式总是能够穷举出所有的情景。遗憾的是，这样的代码丧失了检测匹配情景有没有变更的能力。
+
+所以，一般来说，只有我们能够确信，待匹配类型的升级，不会影响 switch 表达式的逻辑的时候，我们才能考虑使用缺省选择情景。
