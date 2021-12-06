@@ -624,3 +624,78 @@ public static boolean isSquare(Shape shape) {
 使用了 default，也就意味着这样的 switch 表达式总是能够穷举出所有的情景。遗憾的是，这样的代码丧失了检测匹配情景有没有变更的能力。
 
 所以，一般来说，只有我们能够确信，待匹配类型的升级，不会影响 switch 表达式的逻辑的时候，我们才能考虑使用缺省选择情景。
+
+### 08 | 抛出异常，是不是错误处理的第一选择？
+
+通常情况下，我们谈到异常的时候，除非有特别的声明，不然指的都是运行时异常或者检查型异常。
+
+我们还知道，异常状况的处理会让代码的效率变低，所以我们不应该使用异常机制来处理正常的状况。一个流畅的业务，理想的情况是，在执行代码时没有任何异常发生。否则，业务执行的效率就会大打折扣。
+
+```java
+public static Digest of(String algorithm) throws NoSuchAlgorithmException {
+    return switch (algorithm) {
+        case "SHA-256" -> new SHA256();
+        case "SHA-512" -> new SHA512();
+        default -> throw new NoSuchAlgorithmException();
+    };
+}
+```
+
+```java
+public static Coded<Digest> of(String algorithm) {
+    return switch (algorithm) {
+        case "SHA-256" -> new Coded(sha256, 0);
+        case "SHA-512" -> new Coded(sha512, 0);
+        default -> new Coded(null, -1);
+    };
+}
+```
+
+需要更多的代码 / 丢弃了调试信息 / 易碎的数据结构
+
+我们能够通过异常的调用堆栈，清楚地看到代码的执行轨迹，快速找到出问题的代码。
+
+生成一个 Coded 的实例，需要遵守两条纪律。第一条纪律是错误码的数值必须一致，0 代表没有错误，如果是其他的值表示出现了错误；第二条纪律是不能同时设置返回值和错误码。但是，这两条纪律需要编写代码的人自觉实现，编译器不会帮助我们检查错误。
+
+使用错误码，也有一条铁的纪律：必须首先检查错误码，然后才能使用返回值。同样，编译器也不会帮助我们检查违反纪律的错误。
+
+**改进方案：共用错误码**
+
+```java
+public sealed interface Returned<T> {
+    record ReturnValue<T>(T returnValue) implements Returned {
+    }
+    
+    record ErrorCode(Integer errorCode) implements Returned {
+    }
+}    
+```
+
+```java
+public static Returned<Digest> of(String algorithm) {
+    return switch (algorithm) {
+        case "SHA-256" -> new ReturnValue(new SHA256());
+        case "SHA-512" -> new ReturnValue(new SHA512());
+        case null, default -> new ErrorCode(-1);
+    };
+}
+```
+
+生成 Coded 实例需要遵守的两条纪律，在这里也不需要了。因为，返回 ReturnValue 这个许可类，就表示没有错误；返回 ErrorCode 这个许可类，就表示出现错误。
+
+```java
+Returned<Digest> rt = Digest.of("SHA-256");
+switch (rt) {
+    case ReturnValue rv -> {
+            Digest d = (Digest) rv.returnValue();
+            d.digest("Hello, world!".getBytes());
+        }
+    case ErrorCode ec ->
+            System.out.println("Failed to get instance");
+}
+```
+
+你要使用返回值，就必须检查它是不是一个 ReturnValue 的实例。这种情况下，使用 Coded 档案类编写代码需要遵守的纪律，也就是必须先检查错误码，在这里也不需要了。
+
+这种方式仍然具有一些缺陷，例如它本身没有携带调试信息。
+
