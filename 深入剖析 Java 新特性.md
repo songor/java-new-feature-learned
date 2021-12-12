@@ -727,3 +727,141 @@ public static Returned<Digest> of(String algorithm) {
 日志记录既可以开启，又可以关闭。如果我们关闭了日志，就不用再生成调试信息了，当然它的性能影响也就消失了。当需要我们定位问题的时候，再启动日志。这时候，我们就能够把性能的影响控制到一个极小的范围内了。
 
 错误码的调试信息使用方式，更符合调试的目的：只有需要调试的时候，才会生成调试信息。
+
+### 10 | Flow 是异步编程的终极选择吗？
+
+**指令式编程模型**
+
+所谓指令式编程模型，需要我们通过代码发布指令，然后等待指令的执行以及指令执行带来的状态变化。我们还要根据目前的状态，来确定下一次要发布的指令，并且用代码把下一个指令表示出来。
+
+指令式编程模型关注的重点就在于控制状态。
+
+阻塞在方法的调用上，增加了系统的延迟，降低了系统能够支持的吞吐量。
+
+C10K 问题（支持 1 万个并发用户）。
+
+**声明式编程模型**
+
+如果指令式编程模型的逻辑是告诉计算机“该怎么做”，那么声明式的编程模型的逻辑就是告诉计算机“要做什么”。
+
+```java
+public sealed abstract class Digest {
+    public static void of(String algorithm,
+        Consumer<Digest> onSuccess, Consumer<Integer> onFailure) {
+        // snipped
+    }
+
+    public abstract void digest(byte[] message,
+        Consumer<byte[]> onSuccess, Consumer<Integer> onFailure);
+}
+```
+
+无论是回调函数的实现，还是回调函数的调用，都可以自由地选择是采用异步的模式，还是同步的模式。
+
+不过，回调函数的设计也有着天生的缺陷。这个缺陷，就是回调地狱（Callback Hell，常被译为回调地狱）。
+
+```java
+Digest.of("SHA-256",
+    md -> {
+        System.out.println("SHA-256 is supported");
+        md.digest("Hello, world!".getBytes(),
+            values -> {
+                System.out.println("SHA-256 is available");
+            },
+            errorCode -> {
+                System.out.println("SHA-256 is not available");
+            });
+    },
+    errorCode -> {
+        System.out.println("Unsupported algorithm: SHA-256");
+    });
+```
+
+逻辑上的堆积，意味着代码的深度耦合。而深度耦合，意味着代码维护困难。深度嵌套里的一点点代码修改，都可能通过嵌套层层朝上传递，最后牵动全局。
+
+这就导致，使用回调函数的声明式编程模型有着严重的场景适应问题。我们通常只使用回调函数解决性能影响最大的模块，而大部分的代码，依然使用传统的、顺序执行的指令式模型。
+
+**反应式编程**
+
+反应式编程的核心是数据流和变化传递。
+
+数据的输出
+
+```java
+@FunctionalInterface
+public static interface Publisher<T> {
+    public void subscribe(Subscriber<? super T> subscriber);
+}
+```
+
+数据的输入
+
+```java
+public static interface Subscriber<T> {
+    public void onSubscribe(Subscription subscription);
+
+    public void onNext(T item);
+
+    public void onError(Throwable throwable);
+
+    public void onComplete();
+}
+```
+
+数据的控制
+
+```java
+public static interface Subscription {
+    public void request(long n);
+
+    public void cancel();
+}
+```
+
+数据的传递
+
+```java
+public static interface Processor<T,R> extends Subscriber<T>, Publisher<R> {
+}
+```
+
+过程的串联
+
+```java
+private static void transform(byte[] message,
+          Function<byte[], byte[]> transformFunction) {
+    SubmissionPublisher<byte[]> publisher =
+            new SubmissionPublisher<>();
+    // create the transform processor
+    Transform<byte[], byte[]> messageDigest =
+            new Transform<>(transformFunction);
+    // create subscriber for the processor
+    Destination<byte[]> subscriber = new Destination<>(
+            values -> System.out.println(
+                    "Got it: " + Utilities.toHexString(values)));
+    // chain processor and subscriber
+    publisher.subscribe(messageDigest);
+    messageDigest.subscribe(subscriber);
+    publisher.submit(message);
+    // close the submission publisher
+    publisher.close();
+}
+```
+
+反应式编程，怎么解决顺序执行带来的延迟后果呢？ 反应式编程，怎么解决回调函数带来的堆挤问题呢？（过程串联）
+
+```java
+Returned<Digest> rt = Digest.of("SHA-256");
+switch (rt) {
+    case Returned.ReturnValue rv -> {
+        if (rv.returnValue() instanceof Digest d) {
+            transform("Hello, World!".getBytes(), d::digest);
+        } else {
+            System.out.println("Implementation error: SHA-256");
+        }
+    }
+    case Returned.ErrorCode ec -> System.out.println("Unsupported algorithm: SHA-256");
+}
+```
+
+其中最要命的缺陷，就是错误很难排查，这是异步编程的通病。而反应式编程模型的解耦设计，加剧了错误排查的难度，这会严重影响开发的效率，降低代码的可维护性。
