@@ -699,3 +699,31 @@ switch (rt) {
 
 这种方式仍然具有一些缺陷，例如它本身没有携带调试信息。
 
+### 09 | 异常恢复，付出的代价能不能少一点？
+
+```java
+public static Returned<Digest> of(String algorithm) {
+    return switch (algorithm) {
+        case "SHA-256" -> new Returned.ReturnValue(new SHA256());
+        case "SHA-512" -> new Returned.ReturnValue(new SHA512());
+        case null -> {
+            System.getLogger("co.ivi.jus.stack.union")
+                    .log(System.Logger.Level.WARNING,
+                        "No algorithm is specified",
+                        new Throwable("the calling stack"));
+            yield new Returned.ErrorCode(-1);
+        }
+        default -> {
+            System.getLogger("co.ivi.jus.stack.union")
+                    .log(System.Logger.Level.INFO,
+                    "Unknown algorithm is specified " + algorithm,
+                            new Throwable("the calling stack"));
+            yield new Returned.ErrorCode(-1);
+        }
+    };
+}
+```
+
+日志记录既可以开启，又可以关闭。如果我们关闭了日志，就不用再生成调试信息了，当然它的性能影响也就消失了。当需要我们定位问题的时候，再启动日志。这时候，我们就能够把性能的影响控制到一个极小的范围内了。
+
+错误码的调试信息使用方式，更符合调试的目的：只有需要调试的时候，才会生成调试信息。
