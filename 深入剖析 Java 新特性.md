@@ -916,3 +916,31 @@ private static Returned<Float> sumInVector(FloatVector va, FloatVector vx) {
 }
 ```
 
+### 12 | 外部内存接口：零拷贝的障碍还有多少？
+
+像 TensorFlow、Ignite、Flink 以及 Netty 这样的类库，往往对性能有着偏执的追求。为了避免 Java 垃圾收集器不可预测的行为以及额外的性能开销，这些产品一般倾向于使用 JVM 之外的内存来存储和管理数据。这样的数据，就是我们常说的堆外数据（off-heap data）。
+
+使用堆外存储最常用的办法，就是使用 ByteBuffer 这个类来分配直接存储空间（direct buffer）。JVM 虚拟机会尽最大的努力在直接存储空间上执行 IO 操作，避免数据在本地和 JVM 之间的拷贝。
+
+理想状况下，一份数据只需要一份内存空间，这就是我们常说的零拷贝。
+
+第一个缺陷是没有资源释放的接口。一旦一个 ByteBuffer 实例化，它所占用的内存的释放，就完全依赖于 JVM 的垃圾回收机制。
+
+第二个缺陷是存储空间的限制。ByteBuffer 存储空间的大小，是使用 Java 整数来表示的。所以，它的存储空间最多只有 2G。
+
+**外部内存接口**
+
+```java
+try (ResourceScope scope = ResourceScope.newConfinedScope()) {
+    MemorySegment segment = MemorySegment.allocateNative(4, scope);
+    for (int i = 0; i < 4; i++) {
+        MemoryAccess.setByteAtOffset(segment, i, (byte)'A');
+    }
+}
+```
+
+ResourceScope 这个类实现了 AutoCloseable 接口，我们就可以使用 try-with-resource 这样的语句，及时地释放掉它管理的内存了。
+
+MemorySegment 这个类，定义和模拟了一段连续的内存区域。MemoryAccess 这个类，定义了可以对 MemorySegment 执行读写操作。这两个类的寻址数据类型使用的是长整形（long）。
+
+外部内存接口的更大使命，是和外部函数接口联系在一起的。
