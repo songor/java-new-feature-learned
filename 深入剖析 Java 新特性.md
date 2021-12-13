@@ -865,3 +865,54 @@ switch (rt) {
 ```
 
 其中最要命的缺陷，就是错误很难排查，这是异步编程的通病。而反应式编程模型的解耦设计，加剧了错误排查的难度，这会严重影响开发的效率，降低代码的可维护性。
+
+### 11 | 矢量运算：Java 的机器学习要来了吗？
+
+<img src="线性方程.webp" alt="线性方程" style="zoom:50%;" />
+
+```java
+static final float[] a = new float[] {0.6F, 0.7F, 0.8F, 0.9F};
+static final float[] x = new float[] {1.0F, 2.0F, 3.0F, 4.0F};
+
+private static Returned<Float> sumInScalar(float[] a, float[] x) {
+    if (a == null || x == null || a.length != x.length) {
+        return new Returned.ErrorCode(-1);
+    }
+    float[] y = new float[a.length];
+    for (int i = 0; i < a.length; i++) {
+        y[i] = a[i] * x[i];
+    }
+    float r = 0F;
+    for (int i = 0; i < y.length; i++) {
+        r += y[i];
+    }
+    return new Returned.ReturnValue<>(r);
+}
+```
+
+Java 的矢量运算就是使用单个指令并行处理多个数据的一个尝试（单指令多数据，Single Instruction Multiple Data）。
+
+```java
+static final float[] a = new float[] {0.6F, 0.7F, 0.8F, 0.9F};
+static final FloatVector va =
+        FloatVector.fromArray(FloatVector.SPECIES_128, a, 0);
+static final float[] x = new float[] {1.0F, 2.0F, 3.0F, 4.0F};
+static final FloatVector vx =
+        FloatVector.fromArray(FloatVector.SPECIES_128, x, 0);
+
+private static Returned<Float> sumInVector(FloatVector va, FloatVector vx) {
+    if (va == null || vx == null || va.length() != vx.length()) {
+        return new Returned.ErrorCode(-1);
+    }
+    
+    FloatVector vy = va.mul(vx);
+    float[] y = vy.toArray();
+    
+    float r = 0F;
+    for (int i = 0; i < y.length; i++) {
+        r += y[i];
+    }
+    return new Returned.ReturnValue<>(r);
+}
+```
+
