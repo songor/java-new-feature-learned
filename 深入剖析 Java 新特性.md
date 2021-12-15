@@ -944,3 +944,34 @@ ResourceScope 这个类实现了 AutoCloseable 接口，我们就可以使用 tr
 MemorySegment 这个类，定义和模拟了一段连续的内存区域。MemoryAccess 这个类，定义了可以对 MemorySegment 执行读写操作。这两个类的寻址数据类型使用的是长整形（long）。
 
 外部内存接口的更大使命，是和外部函数接口联系在一起的。
+
+### 13 | 外部函数接口，能不能取代 Java 本地接口？
+
+Java 本地接口面临的比较大的问题有两个：
+
+一个是 C 语言编译、链接带来的问题，因为 Java 本地接口实现的动态库是平台相关的，所以就没有了 Java 语言“一次编译，到处运行”的跨平台优势；另一个问题是，因为逃脱了 JVM 的语言安全机制，JNI 本质上是不安全的。
+
+```java
+import java.lang.invoke.MethodType;
+import jdk.incubator.foreign.*;
+
+public class HelloWorld {
+    public static void main(String[] args) throws Throwable {
+        try (ResourceScope scope = ResourceScope.newConfinedScope()) {
+            CLinker cLinker = CLinker.getInstance();
+            MethodHandle cPrintf = cLinker.downcallHandle(
+                    CLinker.systemLookup().lookup("printf").get(),
+                    MethodType.methodType(int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER));
+
+            MemorySegment helloWorld =
+                    CLinker.toCString("Hello, world!\n", scope);
+            cPrintf.invoke(helloWorld.address());
+        }
+    }
+}
+```
+
+使用外部函数接口的代码，不再需要编写 C 代码。当然，也不再需要编译、链接生成 C 的动态库了。所以，由动态库带来的平台相关的问题，也就不存在了。
+
+可以说，使用外部函数接口的代码，是 Java 代码，因此也受到 Java 安全机制的约束。
