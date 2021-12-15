@@ -975,3 +975,54 @@ public class HelloWorld {
 使用外部函数接口的代码，不再需要编写 C 代码。当然，也不再需要编译、链接生成 C 的动态库了。所以，由动态库带来的平台相关的问题，也就不存在了。
 
 可以说，使用外部函数接口的代码，是 Java 代码，因此也受到 Java 安全机制的约束。
+
+### 用户故事 | 保持好奇心，积极拥抱变化
+
+```java
+// 假如给定一个由数字 1，2，3，4 构成的 List，要求把元素值都扩大一倍
+// java8
+List<Integer> result = initList.stream().map(i -> i * 2).collect(Collectors.toList());
+// java11
+var result = initList.stream().map(i -> i * 2).collect(Collectors.toUnmodifiableList());
+// java17
+var result = initList.stream().map(i -> i * 2).toList();
+```
+
+不可变数据可以让开发更加简单、可回溯、测试友好，它减少了很多可能的副作用，也就是说，减少了 Bug 的出现。
+
+```java
+// lombok 是 web 开发常用的扩展包，其中 setter 是一个可变操作，我们可以在配置文件中把它禁用掉，通过其它方式来替代
+lombok.setter.flagUsage=error
+lombok.data.flagUsage=error
+
+@With
+@Getter
+@Builder(toBuilder = true)
+@AllArgsConstructor(staticName = "of")
+@NoArgsConstructor(staticName = "of")
+@FieldDefaults(makeFinal = true, level = AccessLevel.PRIVATE)
+public class Model() {
+    String id;
+    String name;
+    String type;
+}
+
+var model_01 = Model.of("101", "model_01", "model");
+
+var model_02 = Model.of();
+
+var model_03 = Model.toBuilder().id("301").name("model_03").build();
+
+var model_04 = model_01.withName("model_04");
+
+var model_05 = model_01.toBuilder().name("model_05").type("new_model").build();
+```
+
+这段代码使用 of() 方法构建新对象，withXX() 方法修改单个参数，toBuilder() 方法修改多个参数，修改后会返回新的对象。
+
+```java
+@With
+@Builder(toBuilder = true)
+public record Model(String id, String name, String type) {}
+```
+
