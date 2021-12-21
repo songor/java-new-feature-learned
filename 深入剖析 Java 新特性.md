@@ -1026,3 +1026,76 @@ var model_05 = model_01.toBuilder().name("model_05").type("new_model").build();
 public record Model(String id, String name, String type) {}
 ```
 
+### 14 | 禁止空指针，该怎么避免崩溃的空指针？
+
+我们需要检查返回值有没有可能是空指针，然后才能继续使用返回值。
+
+**避免空指针**
+
+在很多场景下，我们都可以使用空值来替代空指针，比如，空的字符串、空的集合。
+
+```java
+public record FullName(String firstName, String middleName, String lastName) {
+    public FullName(String firstName, String middleName, String lastName) {
+        this.firstName = firstName == null ? "" : firstName;
+        this.middleName = middleName == null ? "" : middleName;
+        this.lastName = lastName == null ? "" : lastName;
+    }
+}
+```
+
+**强制性检查**
+
+**不尽人意的 Optional**
+
+设计 Optional 的目的，是希望开发者能够先调用它的 Optional.isPresent 方法，然后再调用 Optional.get 方法获得目标对象。
+
+```java
+if (x.y().isPresent()) {
+    return x.y().get();
+}
+```
+
+遗憾的是，我们也可以不按照预期的方式使用它。这不在设计者的预期之内，但这是合法的代码。
+
+```java
+return x.y().get();
+```
+
+**新特性带来的新希望**
+
+我们希望返回值的检查是强制性的。如果不检查，就没有办法得到返回值指代的真实对象。
+
+```java
+public sealed interface Returned {
+    Returned.Undefined UNDEFINED = new Undefined();
+
+    record ReturnValue<T>(T returnValue) implements Returned {
+    }
+
+    record Undefined() implements Returned {
+    }
+}
+```
+
+```java
+public Returned<String> middleName() {
+    if (middleName == null) {
+        return Returned.UNDEFINED;
+    }
+    return new Returned.ReturnValue<>(middleName);
+}
+```
+
+```java
+private static boolean hasMiddleName(FullName fullName, String middleName) {
+    return switch (fullName.middleName()) {
+        case Returned.Undefined undefined -> false;
+        case Returned.ReturnValue rv -> {
+            String returnedMiddleName = (String) rv.returnValue();
+            yield returnedMiddleName.equals(middleName);
+        }
+    };
+}
+```
+
