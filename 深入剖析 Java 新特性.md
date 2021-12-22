@@ -1116,3 +1116,67 @@ MD2 / MD5 / SHA-1 / DES / 3DES / RC4 / SSL 3.0 / TLS 1.0 / TLS 1.1 / 密钥小�
 **推荐使用的算法**
 
 256 位的 AES 算法 / SHA-256、SHA-512 单向散列函数 / RSASSA-PSS 签名算法 / X25519/X448 密钥交换算法 / EdDSA 签名算法
+
+### 16 | 改进的废弃，怎么避免使用废弃的特性？
+
+在 JDK 中，公开接口的废弃需要使用两种不同的机制，也就是 Deprecated 注解（annotation）和 Deprecated 文档标记（JavaDoc tag）。
+
+如果一段程序使用了废弃接口，在编译的时候就会提出警告。但是，有很多编译环境把编译警告看作是编译错误。为了解决这样的问题，JDK 还提供了“消除使用废弃接口的编译警告”选项，也就是 SuppressWarnings 注解。
+
+为什么删除废弃的公开接口这么困难呢？如果从废弃机制本身的角度来思考，下面几个问题延迟了废弃接口使用者的迁移意愿和努力。
+
+第一个问题，也是最重要的问题，就是 SuppressWarnings 注解的使用。SuppressWarnings 注解的本意是消除编译警告，保持向后的编译兼容性。可是一旦编译警告消除，SuppressWarnings 注解也就抵消了 Deprecated 注解的功效。
+
+第二个问题，就是废弃接口的使用者并不担心使用废弃接口。虽然我们都知道不应该使用废弃的接口，但是因为一些人认为没有紧急迁移的必要性，也不急着制定代码迁移的时间表，所以倾向于先使用 SuppressWarnings 注解把编译警告消除了。
+
+第三个问题，就是废弃接口的使用者并不知道接口废弃了多久。在接口使用者的眼里，废弃了十年和废弃了一年的接口没有什么区别。可是，在接口维护者的眼里，废弃了十年的接口应该可以放心地删除了。
+
+**改进的废弃**
+
+第一个改进是添加了一个新的工具，jdeprscan。有了这个工具，就可以扫描编译好的 Java 类或者包，看看有没有使用废弃的接口了。即使代码使用了 SuppressWarnings 注解，jdeprscan 的结果也不受影响。
+
+另外，如果我们使用第三方的类库，或者已经编译好的类库，发现对废弃接口的依赖关系很重要。如果将来废弃接口被删除，使用废弃接口的类库将不能正常运行。而 jdeprscan 允许我们在使用一个类库之前进行废弃依赖关系检查，提前做好风险的评估。
+
+第二个改进是给 Deprecated 注解增加了一个 forRemoval 属性。如果这个属性设置为 true，那就表示删除这个废弃接口已经提上了日程。这样的改进，强调了代码迁移的紧急性，它给了使用者一个明确的提示。
+
+第三个改进是给 Deprecated 注解增加了一个 since 属性。这个属性会说明这个接口是在哪一个版本废弃的。
+
+```java
+public sealed abstract class Digest {
+    /**
+     * -- snipped
+     *
+     * @deprecated This method is not performance friendly. Use
+     *             {@link #digest(byte[], byte[]) instead.
+     */
+    @Deprecated(since = "1.4", forRemoval = true)
+    public abstract byte[] digest(byte[] message);
+
+    // snipped
+    public void digest(byte[] message, byte[] digestValue) {
+        // snipped
+    }
+}
+```
+
+如果在 Deprecated 注解里新加入 forRemoval 属性，并且设置为 true，那么以前的 SuppressWarnings 就会失去效果。要想消除掉编译警告，我们需要使用新的选项。
+
+```java
+@SuppressWarnings("removal")
+public static void main(String[] args) {
+    try {
+        Digest.of("SHA-256")
+              .digest("Hello, world!".getBytes());
+    } catch (NoSuchAlgorithmException ex) {
+        // ignore
+    }
+}
+```
+
+**废弃三部曲**
+
+第一步，废弃一个接口，标明废弃的版本号，并且描述替代方案。
+
+第二步，添加 forRemoval 属性，把删除的计划提上日程。
+
+第三步，删除废弃的接口。
