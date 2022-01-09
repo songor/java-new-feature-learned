@@ -1207,3 +1207,163 @@ Java 的编译器只需要知道公开接口的规范，并不会去检查实现
 
 Java 语言没有描述和定义包之间的依赖关系，这个缺失，导致了无法有效地封闭实现的细节；无法有效地管理应用的部署；无法精准地控制类的检索和加载，也影响了应用启动的效率。
 
+### 18 | 模块系统：怎么模块化你的应用程序？
+
+```java
+package co.ivi.jus.crypto;
+
+import java.util.ServiceLoader;
+
+public interface Digest {
+    byte[] digest(byte[] message);
+
+    static Returned<Digest> of(String algorithm) {
+        ServiceLoader<DigestManager> serviceLoader =
+                ServiceLoader.load(DigestManager.class);
+        for (DigestManager cryptoManager : serviceLoader) {
+            Returned<Digest> rt = cryptoManager.create(algorithm);
+            switch (rt) {
+                case Returned.ReturnValue rv -> {
+                    return rv;
+                }
+                case Returned.ErrorCode ec -> {
+                    continue;
+                }
+            }
+        }
+        return Returned.UNDEFINED;
+    }
+}
+```
+
+```java
+package co.ivi.jus.crypto;
+
+public interface DigestManager {
+    Returned<Digest> create(String algorithm);
+}
+```
+
+```java
+package co.ivi.jus.impl;
+
+// snipped
+
+public final class DigestManagerImpl implements DigestManager {
+    @Override
+    public Returned<Digest> create(String algorithm) {
+        return switch (algorithm) {
+            case "SHA-256" -> Sha256.returnedSha256;
+            case "SHA-512" -> Sha512.returnedSha512;
+            default -> Returned.UNDEFINED;
+        };
+    }
+}
+```
+
+```java
+package co.ivi.jus.impl;
+
+import co.ivi.jus.crypto.Digest;
+import co.ivi.jus.crypto.Returned;
+
+final class Sha256 implements Digest {
+    static final Returned.ReturnValue<Digest> returnedSha256;
+    // snipped
+    private Sha256() {
+        // snipped
+    }
+
+    @Override
+    public byte[] digest(byte[] message) {
+        // snipped
+    }
+}
+```
+
+由于 ServiceLoader 需要使用 public 修饰的桥梁接口，所以我们不能使用除了 public 以外的访问修饰符。也就是说，如果应用程序加载了这个 Java 包，它就可以直接使用 DigestManagerImpl 类。
+
+**使用 Java 模块**
+
+把公开接口部分 co.ivi.jus.crypto 封装到模块 jus.crypto
+
+```java
+module jus.crypto {
+    // 模块的公开接口
+    exports co.ivi.jus.crypto;
+    // 使用 DigestManager 定义的服务接口
+    uses co.ivi.jus.crypto.DigestManager;
+}
+```
+
+把内部接口部分 co.ivi.jus.impl 封装到模块 jus.crypto.impl
+
+```java
+module jus.crypto.impl {
+    // 这个模块需要使用 jus.crypto 模块
+    requires jus.crypto;
+    // 这个模块实现了 DigestManager 定义的服务接口
+    provides co.ivi.jus.crypto.DigestManager with co.ivi.jus.impl.DigestManagerImpl;
+}
+```
+
+模块化应用程序
+
+```java
+package co.ivi.jus.use;
+
+import co.ivi.jus.crypto.Digest;
+import co.ivi.jus.crypto.Returned;
+
+public class UseCase {
+    public static void main(String[] args) {
+        Returned<Digest> rt = Digest.of("SHA-256");
+        switch (rt) {
+            case Returned.ReturnValue rv -> {
+                Digest d = (Digest) rv.returnValue();
+                d.digest("Hello, world!".getBytes());
+            }
+            case Returned.ErrorCode ec ->
+                    System.getLogger("co.ivi.jus.stack.union")
+                        .log(System.Logger.Level.INFO,
+                              "Failed to get instance of SHA-256");
+        }
+    }
+}
+```
+
+```java
+module jus.crypto.use {
+    requires jus.crypto;
+}
+```
+
+**模块的编译和运行**
+
+```shell
+$ cd jus.crypto
+$ javac --enable-preview --release 17 \
+      -d classes src/main/java/co/ivi/jus/crypto/* \
+      src/main/java/module-info.java
+$ jar --create --file ../jars/jus.crypto.jar -C classes .
+
+$ cd ../jus.crypto.impl
+$ javac --enable-preview --release 17 \
+      --module-path ../jars -d classes \
+      src/main/java/co/ivi/jus/impl/* \
+      src/main/java/module-info.java
+$ jar --create --file ../jars/jus.crypto.impl.jar -C classes .
+
+$ cd ../jus.crypto.use
+$ javac --enable-preview --release 17 \
+      --module-path ../jars -d classes \
+      src/main/java/co/ivi/jus/use/* \
+      src/main/java/module-info.java 
+$ jar --create --file ../jars/jus.crypto.use.jar \
+      --main-class co.ivi.jus.use.UseCase \
+      -C classes .
+
+$ java --enable-preview --module-path ../jars --module jus.crypto.use
+```
+
+[java-9-modules-cheat-sheet](java-9-modules-cheat-sheet.pdf)
